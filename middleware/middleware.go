@@ -1,4 +1,4 @@
-package handlers
+package middleware
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	AUTH_NEEDED = []string{
+	NO_AUTH_NEEDED = []string{
 		"getToken",
 		"getOffers",
 		"getPointOfSale",
@@ -15,12 +15,12 @@ var (
 )
 
 func shouldCheckToken(route string) bool {
-	for _, p := range AUTH_NEEDED {
+	for _, p := range NO_AUTH_NEEDED {
 		if strings.Contains(route, p) {
-			return true
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 func CheckAuthMiddleware(next http.Handler) http.Handler {
@@ -29,7 +29,7 @@ func CheckAuthMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		
+
 		tokenString := r.Header.Get("Authorization")
 
 		userAPIURL := fmt.Sprintf("http://localhost:5050/verifyToken?token=%s", tokenString)
