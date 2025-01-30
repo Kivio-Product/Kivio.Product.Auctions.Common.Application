@@ -14,13 +14,19 @@ var (
 	}
 )
 
-func shouldCheckToken(route string) bool {
-	for _, p := range NO_AUTH_NEEDED {
-		if strings.Contains(route, p) {
-			return false
+func ConfigureCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+		if r.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
 		}
-	}
-	return true
+
+		next.ServeHTTP(w, r)
+	})
 }
 
 func CheckAuthMiddleware(next http.Handler) http.Handler {
@@ -54,4 +60,13 @@ func CheckAuthMiddleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func shouldCheckToken(route string) bool {
+	for _, p := range NO_AUTH_NEEDED {
+		if strings.Contains(route, p) {
+			return false
+		}
+	}
+	return true
 }
