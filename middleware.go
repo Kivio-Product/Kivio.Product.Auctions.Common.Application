@@ -3,7 +3,6 @@ package middleware
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -72,37 +71,31 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 		// 	}
 		// 	next.ServeHTTP(w, r)
 
-		tokenString := r.Header.Get("Access_token")
-		if tokenString == "" {
-			http.Error(w, "Missing token", http.StatusUnauthorized)
-			return
-		}
-
 		err := godotenv.Load(".env")
 		if err != nil {
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
 
-		JWTSecret := os.Getenv("JWT_SECRET")
-		if JWTSecret == "" {
-			http.Error(w, "JWT_SECRET not set in .env file", http.StatusInternalServerError)
+		apiKeyHeader := r.Header.Get("Api_Key")
+		if apiKeyHeader == "" {
+			http.Error(w, "Missing Api key", http.StatusBadRequest)
+			return
+		}
+		if !validateAPIKey(apiKeyHeader) {
+			http.Error(w, "Invalid Api Key", http.StatusUnauthorized)
 			return
 		}
 
-		keyFunc := func(token *jwt.Token) (interface{}, error) {
-			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-			}
-			return []byte(JWTSecret), nil
+		tokenString := r.Header.Get("Access_token")
+		if tokenString == "" {
+			http.Error(w, "Missing token", http.StatusUnauthorized)
+			return
 		}
 
-		token, err := jwt.Parse(tokenString, keyFunc,
-			jwt.WithValidMethods([]string{"HS256"}),
-		)
-
+		token, err := validateToken(tokenString)
 		if err != nil {
-			http.Error(w, "Internal error", http.StatusInternalServerError)
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
 
@@ -117,7 +110,6 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 				var appMeta AppMetadata
 				err = json.Unmarshal(jsonData, &appMeta)
 				if err != nil {
-					log.Println("Error unmarshalling app_metadata:", err)
 					http.Error(w, "Error unmarshalling app_metadata", http.StatusInternalServerError)
 					return
 				}
@@ -128,7 +120,6 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 						return
 					}
 				}
-
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			} else {
@@ -136,11 +127,32 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 				return
 			}
 		} else {
-
 			http.Error(w, "Invalid token claims or token is not valid", http.StatusUnauthorized)
 			return
 		}
 	})
+}
+
+func validateAPIKey(apiKeyHeader string) bool {
+	apiKey := os.Getenv("API_KEY")
+	return apiKey != "" && apiKey == apiKeyHeader
+}
+
+func validateToken(tokenString string) (*jwt.Token, error) {
+	JWTSecret := os.Getenv("JWT_SECRET")
+
+	keyFunc := func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(JWTSecret), nil
+	}
+
+	token, err := jwt.Parse(tokenString, keyFunc, jwt.WithValidMethods([]string{"HS256"}))
+	if err != nil {
+		return nil, err
+	}
+	return token, nil
 }
 
 func shouldCheckToken(route string) bool {
