@@ -93,7 +93,7 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("método de firma inesperado: %v", token.Header["alg"])
 			}
-			return JWTSecret, nil
+			return []byte(JWTSecret), nil
 		}
 
 		token, err := jwt.Parse(tokenString, keyFunc, jwt.WithAudience("authenticated"))
