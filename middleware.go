@@ -80,7 +80,8 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 
 		err := godotenv.Load(".env")
 		if err != nil {
-			log.Fatal("Error loading .env file")
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
 		}
 
 		JWTSecret := os.Getenv("JWT_SECRET")
@@ -91,14 +92,18 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 
 		keyFunc := func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("método de firma inesperado: %v", token.Header["alg"])
+				return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 			}
 			return []byte(JWTSecret), nil
 		}
 
-		token, err := jwt.Parse(tokenString, keyFunc, jwt.WithAudience("authenticated"))
+		token, err := jwt.Parse(tokenString, keyFunc,
+			jwt.WithValidMethods([]string{"HS256"}),
+		)
+
 		if err != nil {
-			log.Fatalf("Error al verificar el token: %v", err)
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
