@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/golang-jwt/jwt"
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
 )
 
@@ -89,17 +89,16 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 			return
 		}
 
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		keyFunc := func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method %v", token.Header["alg"])
+				return nil, fmt.Errorf("método de firma inesperado: %v", token.Header["alg"])
 			}
-			return []byte(JWTSecret), nil
-		})
+			return JWTSecret, nil
+		}
 
+		token, err := jwt.Parse(tokenString, keyFunc, jwt.WithAudience("authenticated"))
 		if err != nil {
-			log.Println("Error parsing token:", err)
-			http.Error(w, "Error parsing token", http.StatusUnauthorized)
-			return
+			log.Fatalf("Error al verificar el token: %v", err)
 		}
 
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
@@ -132,7 +131,7 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 				return
 			}
 		} else {
-			
+
 			http.Error(w, "Invalid token claims or token is not valid", http.StatusUnauthorized)
 			return
 		}
