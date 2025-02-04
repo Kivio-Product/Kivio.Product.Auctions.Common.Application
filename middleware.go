@@ -82,17 +82,23 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 		if err != nil {
 			log.Fatal("Error loading .env file")
 		}
+
 		JWTSecret := os.Getenv("JWT_SECRET")
+		if JWTSecret == "" {
+			http.Error(w, "JWT_SECRET not set in .env file", http.StatusInternalServerError)
+			return
+		}
 
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("Unexpected signing method %v", token.Header["alg"])
+				return nil, fmt.Errorf("unexpected signing method %v", token.Header["alg"])
 			}
 			return []byte(JWTSecret), nil
 		})
 
 		if err != nil {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			log.Println("Error parsing token:", err)
+			http.Error(w, "Error parsing token", http.StatusUnauthorized)
 			return
 		}
 
@@ -100,15 +106,15 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 			if appMetadata, exists := claims["app_metadata"]; exists {
 				jsonData, err := json.Marshal(appMetadata)
 				if err != nil {
-					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					http.Error(w, "Error marshalling app_metadata", http.StatusInternalServerError)
 					return
 				}
 
 				var appMeta AppMetadata
 				err = json.Unmarshal(jsonData, &appMeta)
 				if err != nil {
-					log.Println("Error al parsear app_metadata:", err)
-					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+					log.Println("Error unmarshalling app_metadata:", err)
+					http.Error(w, "Error unmarshalling app_metadata", http.StatusInternalServerError)
 					return
 				}
 
@@ -119,14 +125,15 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 					}
 				}
 
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
 			} else {
-				http.Error(w, "Invalid token", http.StatusUnauthorized)
+				http.Error(w, "app_metadata not found in token", http.StatusUnauthorized)
 				return
 			}
 		} else {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			
+			http.Error(w, "Invalid token claims or token is not valid", http.StatusUnauthorized)
 			return
 		}
 	})
