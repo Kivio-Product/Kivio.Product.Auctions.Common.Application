@@ -8,7 +8,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Kivio-Product/Kivio.Product.Auctions.Common.Application/helpers"
 	"github.com/golang-jwt/jwt"
 	"github.com/joho/godotenv"
 )
