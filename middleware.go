@@ -1,11 +1,11 @@
 package middleware
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/joho/godotenv"
@@ -17,13 +17,17 @@ type AppMetadata struct {
 	Role      string   `json:"role"`
 }
 
-var (
-	NO_AUTH_NEEDED = []string{
-		"getToken",
-		"getOffers",
-		"getPointOfSale",
-	}
-)
+type Response[T any] struct {
+	Data   T        `json:"data,omitempty"`
+	Errors []string `json:"errors,omitempty"`
+}
+
+type GenerateTokenRequest struct {
+	OfferID string `json:"offerId"`
+}
+
+type contextKey string
+const OfferIDKey contextKey = "offerID"
 
 func ConfigureCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -40,36 +44,49 @@ func ConfigureCORS(next http.Handler) http.Handler {
 	})
 }
 
+func CheckAuctionsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		queryParams := r.URL.Query()
+		tokenString := queryParams.Get("token")
+
+		userAPIURL := fmt.Sprintf("http://localhost:9090/v1/verify-token?token=%s", tokenString)
+
+		req, err := http.NewRequest("POST", userAPIURL, nil)
+		if err != nil {
+			http.Error(w, "Error creating request", http.StatusInternalServerError)
+			return
+		}
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			http.Error(w, "Error communicating with user API", http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			return
+		}
+
+		var responseData Response[GenerateTokenRequest]
+
+		if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
+			http.Error(w, "Error decoding response", http.StatusInternalServerError)
+			return
+		}
+		ctx := context.WithValue(r.Context(), OfferIDKey, responseData.Data.OfferID)
+        r = r.WithContext(ctx)
+
+        next.ServeHTTP(w, r) 
+
+	})
+}
+
 func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// 	if !shouldCheckToken(r.URL.Path) {
-		// 		next.ServeHTTP(w, r)
-		// 		return
-		// 	}
-
-		// 	tokenString := r.Header.Get("Authorization")
-
-		// 	userAPIURL := fmt.Sprintf("http://localhost:5050/verifyToken?token=%s", tokenString)
-
-		// 	req, err := http.NewRequest("POST", userAPIURL, nil)
-		// 	if err != nil {
-		// 		http.Error(w, "Error creating request", http.StatusInternalServerError)
-		// 		return
-		// 	}
-
-		// 	client := &http.Client{}
-		// 	resp, err := client.Do(req)
-		// 	if err != nil {
-		// 		http.Error(w, "Error communicating with user API", http.StatusInternalServerError)
-		// 		return
-		// 	}
-		// 	defer resp.Body.Close()
-
-		// 	if resp.StatusCode != http.StatusOK {
-		// 		http.Error(w, "Invalid token", http.StatusUnauthorized)
-		// 		return
-		// 	}
-		// 	next.ServeHTTP(w, r)
 
 		err := godotenv.Load(".env")
 		if err != nil {
@@ -133,6 +150,27 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 	})
 }
 
+func VerifyInternalRequest(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := godotenv.Load(".env")
+		if err != nil {
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+
+		apiKeyHeader := r.Header.Get("Api_Key")
+		if apiKeyHeader == "" {
+			http.Error(w, "Missing Api key", http.StatusBadRequest)
+			return
+		}
+		if !validateAPIKey(apiKeyHeader) {
+			http.Error(w, "Invalid Api Key", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func validateAPIKey(apiKeyHeader string) bool {
 	apiKey := os.Getenv("API_KEY")
 	return apiKey != "" && apiKey == apiKeyHeader
@@ -153,13 +191,4 @@ func validateToken(tokenString string) (*jwt.Token, error) {
 		return nil, err
 	}
 	return token, nil
-}
-
-func shouldCheckToken(route string) bool {
-	for _, p := range NO_AUTH_NEEDED {
-		if strings.Contains(route, p) {
-			return false
-		}
-	}
-	return true
 }
