@@ -27,13 +27,14 @@ type GenerateTokenRequest struct {
 }
 
 type contextKey string
+
 const OfferIDKey contextKey = "offerID"
 
 func ConfigureCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Api_Key, Access_token")
 
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -78,9 +79,9 @@ func CheckAuctionsMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		ctx := context.WithValue(r.Context(), OfferIDKey, responseData.Data.OfferID)
-        r = r.WithContext(ctx)
+		r = r.WithContext(ctx)
 
-        next.ServeHTTP(w, r) 
+		next.ServeHTTP(w, r)
 
 	})
 }
