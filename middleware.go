@@ -51,7 +51,12 @@ func CheckAuctionsMiddleware(next http.Handler) http.Handler {
 		queryParams := r.URL.Query()
 		tokenString := queryParams.Get("token")
 
-		userAPIURL := fmt.Sprintf("http://localhost:9090/v1/verify-token?token=%s", tokenString)
+		userAPIDomain := os.Getenv("USER_API_DOMAIN")
+		if userAPIDomain == "" {
+			userAPIDomain = "http://localhost:9090"
+		}
+
+		userAPIURL := fmt.Sprintf("%s/v1/verify-token?token=%s", userAPIDomain, tokenString)
 
 		req, err := http.NewRequest("POST", userAPIURL, nil)
 		if err != nil {
