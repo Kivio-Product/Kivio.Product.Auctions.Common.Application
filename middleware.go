@@ -47,47 +47,40 @@ func ConfigureCORS(next http.Handler) http.Handler {
 
 func CheckAuctionsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 		queryParams := r.URL.Query()
 		tokenString := queryParams.Get("token")
 
-		userAPIDomain := os.Getenv("USER_API_DOMAIN")
-		if userAPIDomain == "" {
-			userAPIDomain = "http://localhost:9090"
+		if tokenString == "" {
+			http.Error(w, "Token is missing", http.StatusBadRequest)
+			return
 		}
 
-		userAPIURL := fmt.Sprintf("%s/v1/verify-token?token=%s", userAPIDomain, tokenString)
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method %v", token.Header["alg"])
+			}
+			return []byte("JWT_SECRET"), nil
+		})
 
-		req, err := http.NewRequest("POST", userAPIURL, nil)
 		if err != nil {
-			http.Error(w, "Error creating request", http.StatusInternalServerError)
+			http.Error(w, "Invalid Token", http.StatusUnauthorized)
 			return
 		}
 
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			http.Error(w, "Error communicating with user API", http.StatusInternalServerError)
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok || !token.Valid {
+			http.Error(w, "Invalid Token", http.StatusUnauthorized)
 			return
 		}
 
-		var responseData Response[GenerateTokenRequest]
-
-		if err := json.NewDecoder(resp.Body).Decode(&responseData); err != nil {
-			http.Error(w, "Error decoding response", http.StatusInternalServerError)
+		offerId, ok := claims["offerId"].(string)
+		if !ok {
+			http.Error(w, "Invalid Token Claims", http.StatusUnauthorized)
 			return
 		}
-		ctx := context.WithValue(r.Context(), OfferIDKey, responseData.Data.OfferID)
-		r = r.WithContext(ctx)
 
-		next.ServeHTTP(w, r)
-
+		ctx := context.WithValue(r.Context(), OfferIDKey, offerId)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
