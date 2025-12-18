@@ -87,10 +87,8 @@ func CheckAuctionsMiddleware(next http.Handler) http.Handler {
 func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
-		err := godotenv.Load(".env")
-		if err != nil {
-			http.Error(w, "Internal error", http.StatusInternalServerError)
-			return
+		if err := godotenv.Load(".env"); err != nil {
+			fmt.Println("Error loading .env file:", err)
 		}
 
 		apiKeyHeader := r.Header.Get("Api_Key")
@@ -151,10 +149,8 @@ func CheckAuthMiddleware(next http.Handler, allowedRoles []string) http.Handler 
 
 func VerifyInternalRequest(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := godotenv.Load(".env")
-		if err != nil {
-			http.Error(w, "Internal error", http.StatusInternalServerError)
-			return
+		if err := godotenv.Load(".env"); err != nil {
+			fmt.Println("Error loading .env file:", err)
 		}
 
 		apiKeyHeader := r.Header.Get("Api_Key")
